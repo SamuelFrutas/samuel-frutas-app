@@ -1,5 +1,6 @@
 name: Android APK
 
+# Rebuild after native mobile stability and login keyboard fixes.
 on:
   push:
     branches: [ main ]
