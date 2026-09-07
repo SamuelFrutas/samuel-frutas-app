@@ -138,7 +138,8 @@ class MainActivity : Activity() {
         }
         card.addView(tv("Acesso administrativo", 19f, true), lpField())
         val email = field("E-mail", input = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
-        val password = field("Senha", input = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        val password = field("Senha", input = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+        password.keyListener = android.text.method.DigitsKeyListener.getInstance("0123456789")
         card.addView(email, lpField(dp(12)))
         card.addView(password, lpField(dp(10)))
         val message = tv("", 14f, false, Color.rgb(190, 45, 45))
@@ -352,7 +353,8 @@ class MainActivity : Activity() {
 
         val preview = ImageView(this).apply {
             setBackgroundColor(bg)
-            scaleType = ImageView.ScaleType.CENTER_CROP
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = true
             visibility = if (image.text.toString().trim().isBlank()) View.GONE else View.VISIBLE
             contentDescription = "Prévia da imagem do produto"
         }
@@ -458,29 +460,50 @@ class MainActivity : Activity() {
     }
 
     private fun loadImagePreview(url: String, target: ImageView) {
-        if (url.isBlank()) return
+        val cleanUrl = url.trim()
+        if (cleanUrl.isBlank()) return
+        val parsed = try { URL(cleanUrl) } catch (_: Exception) { return }
+        if (parsed.protocol != "http" && parsed.protocol != "https") return
+
         Thread {
+            var connection: HttpURLConnection? = null
             try {
-                val connection = URL(url).openConnection() as HttpURLConnection
+                connection = parsed.openConnection() as HttpURLConnection
                 connection.connectTimeout = 5000
                 connection.readTimeout = 7000
                 connection.instanceFollowRedirects = true
                 connection.doInput = true
                 connection.connect()
+                if (connection.responseCode !in 200..299) return@Thread
+
                 connection.inputStream.use { stream ->
-                    val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                    val bytes = stream.readBytes()
+                    if (bytes.isEmpty() || bytes.size > 12 * 1024 * 1024) return@Thread
+
+                    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@Thread
+
+                    var sample = 1
+                    while (bounds.outWidth / sample > 1200 || bounds.outHeight / sample > 1200) sample *= 2
+                    val options = android.graphics.BitmapFactory.Options().apply {
+                        inSampleSize = sample
+                        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                    }
+                    val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+
                     runOnUiThread {
-                        if (bitmap != null) {
+                        if (!isFinishing && !isDestroyed && bitmap != null && target.isAttachedToWindow) {
                             target.setImageBitmap(bitmap)
+                            target.scaleType = ImageView.ScaleType.FIT_CENTER
                             target.visibility = View.VISIBLE
                         }
                     }
                 }
-                connection.disconnect()
             } catch (_: Exception) {
-                runOnUiThread {
-                    if (target.visibility == View.VISIBLE) target.setImageDrawable(null)
-                }
+                // Invalid, unsupported or oversized remote images must never crash the app.
+            } finally {
+                connection?.disconnect()
             }
         }.start()
     }
