@@ -1,15 +1,13 @@
 package br.com.samuelfrutas.app
 
 import android.content.Intent
-import android.content.res.ColorStateList
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.*
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -19,31 +17,329 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.storage.FirebaseStorage
-import java.util.UUID
+import java.net.URL
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
-    private val green=Color.rgb(46,125,50); private val secondary=Color.rgb(96,125,139); private val border=Color.rgb(223,229,223); private val red=Color.rgb(211,47,47)
-    private lateinit var auth:FirebaseAuth; private lateinit var db:FirebaseFirestore; private lateinit var storage:FirebaseStorage
-    private var productsListener:ListenerRegistration?=null; private var editingId:String?=null; private var selectedImage:Uri?=null; private var existingImageUrl=""
-    private lateinit var nameInput:EditText; private lateinit var category:Spinner; private lateinit var active:CheckBox; private lateinit var unitChecks:List<CheckBox>; private lateinit var loteQty:EditText; private lateinit var loteBox:LinearLayout; private lateinit var preview:ImageView; private lateinit var saveButton:MaterialButton; private lateinit var cancelButton:MaterialButton; private lateinit var productsList:LinearLayout
-    private val gallery=registerForActivityResult(ActivityResultContracts.GetContent()){uri->uri?.let{selectedImage=it;preview.visibility=View.VISIBLE;preview.setImageURI(it)}}
+    private val green = Color.rgb(15, 138, 75)
+    private val orange = Color.rgb(249, 115, 22)
+    private val bg = Color.rgb(244, 246, 245)
+    private val text = Color.rgb(24, 34, 48)
+    private val muted = Color.rgb(102, 112, 133)
+    private val border = Color.rgb(208, 213, 221)
+    private val red = Color.rgb(180, 35, 24)
 
-    override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);initializeFirebase();if(auth.currentUser==null)showLogin()else showAdmin()}
-    private fun initializeFirebase(){val options=FirebaseOptions.Builder().setApiKey("AIzaSyBLU3UNXuPGUFrpmV6syI80ynUHppupeNA").setApplicationId("1:475005081261:web:314ac91f8b0578b995824").setProjectId("samuel-frutas").setStorageBucket("samuel-frutas.firebasestorage.app").build();if(FirebaseApp.getApps(this).isEmpty())FirebaseApp.initializeApp(this,options);auth=FirebaseAuth.getInstance();db=FirebaseFirestore.getInstance();storage=FirebaseStorage.getInstance()}
-    private fun field(hint:String,password:Boolean=false)=EditText(this).apply{this.hint=hint;textSize=15f;setPadding(14,0,14,0);backgroundTintList=ColorStateList.valueOf(border);layoutParams=LinearLayout.LayoutParams(-1,54).apply{bottomMargin=12};if(password)inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD}
-    private fun showLogin(){val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(24,55,24,24);setBackgroundColor(Color.rgb(244,246,244))};root.addView(TextView(this).apply{text="Samuel Frutas";textSize=28f;setTextColor(green);gravity=Gravity.CENTER;setTypeface(null,1)});root.addView(TextView(this).apply{text="Painel de Pedidos";textSize=16f;setTextColor(secondary);gravity=Gravity.CENTER;setPadding(0,6,0,28)});val card=MaterialCardView(this).apply{radius=22f;cardElevation=5f;setCardBackgroundColor(Color.WHITE)};val box=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,22,20,20)};val email=field("E-mail");val password=field("Senha",true);val error=TextView(this).apply{setTextColor(red);visibility=View.GONE;setPadding(0,8,0,0)};val enter=MaterialButton(this).apply{text="Entrar";setTextColor(Color.WHITE);setBackgroundColor(green);minimumHeight=52};enter.setOnClickListener{enter.isEnabled=false;auth.signInWithEmailAndPassword(email.text.toString().trim(),password.text.toString()).addOnCompleteListener{task->enter.isEnabled=true;if(task.isSuccessful)showAdmin()else{error.text="E-mail ou senha inválidos.";error.visibility=View.VISIBLE}}};box.addView(email);box.addView(password);box.addView(enter);box.addView(error);card.addView(box);root.addView(card,LinearLayout.LayoutParams(-1,-2));setContentView(root)}
-    private fun card()=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(16,16,16,16);setBackgroundColor(Color.WHITE);elevation=4f;layoutParams=LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=18}}
-    private fun sectionTitle(text:String)=TextView(this).apply{this.text=text;textSize=16f;setTextColor(green);setTypeface(null,1);setPadding(0,0,0,14)}
-    private fun showAdmin(){val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.rgb(244,246,244))};val header=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(16,16,10,16);setBackgroundColor(green)};val brand=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;layoutParams=LinearLayout.LayoutParams(0,-2,1f)};brand.addView(TextView(this).apply{text="Samuel Frutas";textSize=21f;setTextColor(Color.WHITE);setTypeface(null,1)});brand.addView(TextView(this).apply{text="Painel de administração";textSize=12f;setTextColor(Color.WHITE)});header.addView(brand);header.addView(MaterialButton(this).apply{text="🛒 Ver loja";textSize=11f;setTextColor(Color.WHITE);setBackgroundColor(Color.TRANSPARENT);setOnClickListener{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://samuelfrutas.github.io/samuel-frutas/")))}});root.addView(header);val scroll=ScrollView(this);val content=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(12,18,12,40)};scroll.addView(content);root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));content.addView(TextView(this).apply{text="Cadastro de Produtos";textSize=21f;setTextColor(green);setTypeface(null,1)});content.addView(TextView(this).apply{text="Cadastre, edite, ative ou desative os produtos da loja.";textSize=12f;setTextColor(secondary);setPadding(0,5,0,18)});content.addView(buildForm());content.addView(buildHelp());content.addView(buildProducts());setContentView(root);observeProducts()}
-    private fun buildForm():View{val c=card();c.addView(sectionTitle("Cadastro / Edição de Produtos"));nameInput=field("Ex.: Mamão Papaya");c.addView(nameInput);c.addView(TextView(this).apply{text="Categoria";textSize=12f;setTypeface(null,1);setPadding(0,0,0,6)});category=Spinner(this);category.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("Frutas","Legumes","Verduras","Água de coco e ovos caipira"));c.addView(category,LinearLayout.LayoutParams(-1,52).apply{bottomMargin=14});c.addView(TextView(this).apply{text="Forma de venda";textSize=12f;setTypeface(null,1);setPadding(0,0,0,6)});val labels=listOf("🧺 Unidade","⚖️ Quilo","🥬 Maço","🥚 Dúzia","📦 Lote","🧺 Bandeja (BDJ)","¼","⅛","½ Metade");unitChecks=labels.map{CheckBox(this).apply{text=it;textSize=12f;buttonTintList=ColorStateList.valueOf(green)}};val grid=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};for(i in unitChecks.indices step 2){val row=LinearLayout(this);row.addView(unitChecks[i],LinearLayout.LayoutParams(0,50,1f));if(i+1<unitChecks.size)row.addView(unitChecks[i+1],LinearLayout.LayoutParams(0,50,1f));grid.addView(row)};c.addView(grid);loteBox=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;visibility=View.GONE;setPadding(12,8,12,8);setBackgroundColor(Color.rgb(248,250,248))};loteQty=field("Ex.: 3");loteBox.addView(TextView(this).apply{text="Quantidade de unidades por lote";textSize=12f;setTypeface(null,1)});loteBox.addView(loteQty);c.addView(loteBox);unitChecks[4].setOnCheckedChangeListener{_,checked->loteBox.visibility=if(checked)View.VISIBLE else View.GONE};c.addView(TextView(this).apply{text="Imagem do produto";textSize=12f;setTypeface(null,1);setPadding(0,12,0,6)});c.addView(MaterialButton(this).apply{text="📷 Escolher imagem da galeria";setOnClickListener{gallery.launch("image/*")}});preview=ImageView(this).apply{visibility=View.GONE;scaleType=ImageView.ScaleType.CENTER_CROP;layoutParams=LinearLayout.LayoutParams(110,110).apply{gravity=Gravity.CENTER_HORIZONTAL;bottomMargin=10}};c.addView(preview);active=CheckBox(this).apply{text="Produto ativo na loja";isChecked=true;buttonTintList=ColorStateList.valueOf(green)};c.addView(active);saveButton=MaterialButton(this).apply{text="Salvar Produto";setTextColor(Color.WHITE);setBackgroundColor(green)};cancelButton=MaterialButton(this).apply{text="Cancelar edição";visibility=View.GONE;setOnClickListener{resetForm()}};c.addView(saveButton);c.addView(cancelButton);saveButton.setOnClickListener{saveProduct()};return c}
-    private fun buildHelp():View{val c=card();c.addView(sectionTitle("📋 Como funciona"));c.addView(TextView(this).apply{text="1. Cadastre o produto informando nome e categoria.\n\n2. Escolha as formas de venda que o cliente poderá selecionar.\n\n3. Lote permite definir quantas unidades existem em cada lote.\n\n4. Produto inativo permanece cadastrado, mas não aparece para o cliente.";textSize=13f;setTextColor(secondary);setLineSpacing(3f,1f)});return c}
-    private fun buildProducts():View{val c=card();c.addView(sectionTitle("📦 Produtos cadastrados"));productsList=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};c.addView(productsList);return c}
-    private fun observeProducts(){productsListener?.remove();productsListener=db.collection("produtos").addSnapshotListener{snap,err->if(err!=null)return@addSnapshotListener;productsList.removeAllViews();if(snap==null||snap.isEmpty){productsList.addView(TextView(this).apply{text="Nenhum produto cadastrado.";setTextColor(secondary);setPadding(0,20,0,20)});return@addSnapshotListener};snap.documents.forEach{addProductRow(it.id,it.data?:emptyMap())}}}
-    private fun addProductRow(id:String,p:Map<String,Any>){val box=MaterialCardView(this).apply{radius=14f;cardElevation=2f;setCardBackgroundColor(Color.WHITE)};val row=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(12,12,12,12)};row.addView(TextView(this).apply{text=p["nome"]?.toString() ?: "";textSize=16f;setTypeface(null,1);setTextColor(Color.DKGRAY)});val cat=p["categoria"]?.toString() ?: "frutas";val u=p["unidadesMedida"] as? Map<*,*>;val units=mutableListOf<String>();if(u?.get("unidade")==true)units.add("Unidade");if(u?.get("quilo")==true)units.add("Quilo");if(u?.get("maco")==true)units.add("Maço");if(u?.get("duzia")==true)units.add("Dúzia");if(u?.get("bdj")==true)units.add("BDJ");if(u?.get("umQuarto")==true)units.add("1/4");if(u?.get("umOitavo")==true)units.add("1/8");if(u?.get("metade")==true)units.add("Metade");if(u?.get("lote")==true)units.add("Lote C/${u["quantidadePorLote"] ?: "?"} un.");row.addView(TextView(this).apply{text="${cat.uppercase()} • ${if(units.isEmpty())"-" else units.joinToString(" • ")}";textSize=11f;setTextColor(secondary);setPadding(0,5,0,5)});val isActive=p["ativo"]!=false;row.addView(TextView(this).apply{text=if(isActive)"Ativo" else "Inativo";textSize=12f;setTypeface(null,1);setTextColor(if(isActive)green else red)});val actions=LinearLayout(this);val edit=MaterialButton(this).apply{text="✏️ Editar";textSize=11f;setOnClickListener{fillForm(id,p)}};val del=MaterialButton(this).apply{text="🗑️ Excluir";textSize=11f;setTextColor(red);setOnClickListener{deleteProduct(id)}};actions.addView(edit,LinearLayout.LayoutParams(0,48,1f));actions.addView(del,LinearLayout.LayoutParams(0,48,1f));row.addView(actions);box.addView(row);productsList.addView(box,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=10})}
-    private fun saveProduct(){val name=nameInput.text.toString().trim();if(name.isEmpty()){nameInput.error="Informe o nome";return};val units=mapOf("unidade" to unitChecks[0].isChecked,"quilo" to unitChecks[1].isChecked,"maco" to unitChecks[2].isChecked,"duzia" to unitChecks[3].isChecked,"lote" to unitChecks[4].isChecked,"bdj" to unitChecks[5].isChecked,"umQuarto" to unitChecks[6].isChecked,"umOitavo" to unitChecks[7].isChecked,"metade" to unitChecks[8].isChecked,"quantidadePorLote" to (loteQty.text.toString().toIntOrNull()?:0));val cats=listOf("frutas","legumes","verduras","aguaOvos");val data=hashMapOf<String,Any>("nome" to name,"categoria" to cats[category.selectedItemPosition],"unidadesMedida" to units,"ativo" to active.isChecked);val id=editingId?:UUID.randomUUID().toString();saveButton.isEnabled=false;fun write(url:String){if(url.isNotEmpty())data["imagemUrl"]=url;db.collection("produtos").document(id).set(data,SetOptions.merge()).addOnCompleteListener{saveButton.isEnabled=true;if(it.isSuccessful)resetForm()else Toast.makeText(this,"Erro ao salvar produto",Toast.LENGTH_LONG).show()}};val uri=selectedImage;if(uri!=null){val ref=storage.reference.child("produtos/$id-${UUID.randomUUID()}.jpg");ref.putFile(uri).continueWithTask{ref.downloadUrl}.addOnSuccessListener{write(it.toString())}.addOnFailureListener{saveButton.isEnabled=true;Toast.makeText(this,"Erro no upload da imagem",Toast.LENGTH_LONG).show()}}else write(existingImageUrl)}
-    private fun fillForm(id:String,p:Map<String,Any>){editingId=id;nameInput.setText(p["nome"]?.toString() ?: "");val cats=listOf("frutas","legumes","verduras","aguaOvos");category.setSelection(cats.indexOf(p["categoria"]?.toString()).coerceAtLeast(0));active.isChecked=p["ativo"]!=false;val u=p["unidadesMedida"] as? Map<*,*>;unitChecks.forEach{it.isChecked=false};listOf("unidade","quilo","maco","duzia","lote","bdj","umQuarto","umOitavo","metade").forEachIndexed{i,k->unitChecks[i].isChecked=u?.get(k)==true};loteQty.setText(u?.get("quantidadePorLote")?.toString() ?: "");existingImageUrl=p["imagemUrl"]?.toString() ?: "";selectedImage=null;saveButton.text="Atualizar Produto";cancelButton.visibility=View.VISIBLE}
-    private fun resetForm(){editingId=null;selectedImage=null;existingImageUrl="";nameInput.setText("");category.setSelection(0);active.isChecked=true;unitChecks.forEach{it.isChecked=false};loteQty.setText("");loteBox.visibility=View.GONE;preview.visibility=View.GONE;saveButton.text="Salvar Produto";cancelButton.visibility=View.GONE}
-    private fun deleteProduct(id:String){db.collection("produtos").document(id).delete().addOnFailureListener{Toast.makeText(this,"Não foi possível excluir",Toast.LENGTH_LONG).show()}}
-    override fun onDestroy(){productsListener?.remove();super.onDestroy()}
+    private lateinit var auth: FirebaseAuth
+    private lateinit var db: FirebaseFirestore
+    private var productsListener: ListenerRegistration? = null
+    private var siteListener: ListenerRegistration? = null
+    private var archived = false
+    private var editingId: String? = null
+    private lateinit var nameInput: EditText
+    private lateinit var imageInput: EditText
+    private lateinit var imagePreview: ImageView
+    private lateinit var imageStatus: TextView
+    private lateinit var imageWrap: LinearLayout
+    private lateinit var measureRows: LinearLayout
+    private lateinit var productsList: LinearLayout
+    private lateinit var form: LinearLayout
+    private lateinit var formTitle: TextView
+    private lateinit var activeTab: MaterialButton
+    private lateinit var archivedTab: MaterialButton
+    private lateinit var siteToggle: MaterialButton
+    private lateinit var saveButton: MaterialButton
+    private lateinit var userText: TextView
+    private var siteOffline = false
+
+    data class Measure(var quantity: Int = 1, var unit: String = "Un", var price: Double = 0.0, var lotSize: Int? = null)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        initializeFirebase()
+        if (auth.currentUser == null) showLogin() else showAdmin()
+    }
+
+    private fun initializeFirebase() {
+        val options = FirebaseOptions.Builder()
+            .setApiKey("AIzaSyB1E9oQsIwYO2-r4W5-uQK4ax92OmxISOI")
+            .setApplicationId("1:1052699327049:web:cf22d68c76d064d56b5d98")
+            .setProjectId("samuelfrutasbot")
+            .setStorageBucket("samuelfrutasbot.firebasestorage.app")
+            .build()
+        if (FirebaseApp.getApps(this).isEmpty()) FirebaseApp.initializeApp(this, options)
+        auth = FirebaseAuth.getInstance()
+        db = FirebaseFirestore.getInstance()
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private fun field(hint: String): EditText = EditText(this).apply {
+        this.hint = hint
+        textSize = 15f
+        setPadding(dp(12), 0, dp(12), 0)
+        setBackgroundColor(Color.WHITE)
+        layoutParams = LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(10) }
+    }
+
+    private fun button(label: String, primary: Boolean = true): MaterialButton = MaterialButton(this).apply {
+        text = label
+        isAllCaps = false
+        minHeight = dp(44)
+        textSize = 14f
+        if (primary) { setBackgroundColor(green); setTextColor(Color.WHITE) }
+        else { setBackgroundColor(Color.WHITE); setTextColor(Color.rgb(52, 64, 84)) }
+    }
+
+    private fun card(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(18), dp(18), dp(18), dp(18))
+        setBackgroundColor(Color.WHITE)
+        elevation = dp(2).toFloat()
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) }
+    }
+
+    private fun showLogin() {
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg); setPadding(dp(16), dp(50), dp(16), dp(20)) }
+        root.addView(TextView(this).apply { text = "Samuel Frutas"; textSize = 28f; setTextColor(orange); gravity = Gravity.CENTER; setTypeface(null, 1) })
+        root.addView(TextView(this).apply { text = "Painel administrativo do Sistema de Pedidos"; textSize = 14f; setTextColor(muted); gravity = Gravity.CENTER; setPadding(0, dp(6), 0, dp(22)) })
+        val box = card()
+        val email = field("E-mail")
+        val password = field("Senha").apply { inputType = 0x81 }
+        val msg = TextView(this).apply { setTextColor(red); setPadding(0, dp(6), 0, 0) }
+        val enter = button("Entrar")
+        enter.setOnClickListener {
+            enter.isEnabled = false
+            auth.signInWithEmailAndPassword(email.text.toString().trim(), password.text.toString()).addOnCompleteListener { task ->
+                enter.isEnabled = true
+                if (task.isSuccessful) showAdmin() else msg.text = if (task.exception?.message?.contains("credential", true) == true) "E-mail ou senha inválidos." else "Não foi possível entrar."
+            }
+        }
+        box.addView(email); box.addView(password); box.addView(enter); box.addView(msg)
+        root.addView(box)
+        setContentView(root)
+    }
+
+    private fun showAdmin() {
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(16), dp(14), dp(8), dp(14)); setBackgroundColor(Color.WHITE) }
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+        brand.addView(TextView(this).apply { text = "Painel de Pedidos"; textSize = 23f; setTextColor(text); setTypeface(null, 1) })
+        userText = TextView(this).apply { setTextColor(muted); textSize = 12f }
+        brand.addView(userText)
+        header.addView(brand)
+        val store = button("Abrir loja", false)
+        store.setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://samuelfrutas.github.io/samuel-frutas/pedidos/"))) }
+        header.addView(store)
+        siteToggle = button("Site: ONLINE")
+        siteToggle.setOnClickListener { toggleSite() }
+        header.addView(siteToggle)
+        val logout = button("Sair", false)
+        logout.setOnClickListener { auth.signOut() }
+        header.addView(logout)
+        root.addView(header)
+
+        val scroll = ScrollView(this)
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(12), dp(10), dp(30)) }
+        scroll.addView(content)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val main = card()
+        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, dp(10)) }
+        activeTab = button("Ativos")
+        archivedTab = button("Arquivados", false)
+        tabs.addView(activeTab, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(5) })
+        tabs.addView(archivedTab, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(5) })
+        main.addView(tabs)
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val newProduct = button("+ Adicionar produto")
+        val reload = button("Atualizar", false)
+        actions.addView(newProduct, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(4) })
+        actions.addView(reload, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(4) })
+        main.addView(actions)
+        main.addView(buildForm())
+        productsList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        main.addView(productsList)
+        content.addView(main)
+        setContentView(root)
+        userText.text = auth.currentUser?.email ?: ""
+        newProduct.setOnClickListener { showForm(null) }
+        reload.setOnClickListener { loadProducts() }
+        activeTab.setOnClickListener { archived = false; updateTabs(); loadProducts() }
+        archivedTab.setOnClickListener { archived = true; updateTabs(); loadProducts() }
+        listenSiteStatus()
+        loadProducts()
+    }
+
+    private fun updateTabs() {
+        activeTab.setBackgroundColor(if (!archived) green else Color.WHITE)
+        activeTab.setTextColor(if (!archived) Color.WHITE else Color.rgb(52,64,84))
+        archivedTab.setBackgroundColor(if (archived) green else Color.WHITE)
+        archivedTab.setTextColor(if (archived) Color.WHITE else Color.rgb(52,64,84))
+    }
+
+    private fun buildForm(): View {
+        form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; setPadding(0, dp(16), 0, dp(4)) }
+        formTitle = TextView(this).apply { text = "Novo produto"; textSize = 20f; setTextColor(text); setTypeface(null, 1); setPadding(0, 0, 0, dp(10)) }
+        form.addView(formTitle)
+        nameInput = field("Nome")
+        form.addView(nameInput)
+        imageInput = field("Imagem (URL)")
+        form.addView(imageInput)
+        imageWrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)); setBackgroundColor(Color.rgb(248,250,249)); visibility = View.GONE }
+        imagePreview = ImageView(this).apply { layoutParams = LinearLayout.LayoutParams(dp(180), dp(180)).apply { gravity = Gravity.CENTER }; scaleType = ImageView.ScaleType.CENTER_CROP }
+        imageStatus = TextView(this).apply { text = "Cole a URL da imagem acima para visualizar."; textSize = 12f; setTextColor(muted); gravity = Gravity.CENTER; setPadding(0, dp(6), 0, 0) }
+        imageWrap.addView(imagePreview); imageWrap.addView(imageStatus); form.addView(imageWrap)
+        imageInput.setOnFocusChangeListener { _, has -> if (!has) updateImagePreview() }
+        val measureHead = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(14), 0, dp(8)) }
+        val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+        titleBox.addView(TextView(this).apply { text = "Medidas e preços"; textSize = 15f; setTypeface(null, 1); setTextColor(text) })
+        titleBox.addView(TextView(this).apply { text = "Cadastre as opções que o cliente poderá escolher na loja."; textSize = 11f; setTextColor(muted) })
+        measureHead.addView(titleBox)
+        val add = button("+ Adicionar medida", false)
+        add.setOnClickListener { addMeasureRow(Measure()) }
+        measureHead.addView(add)
+        form.addView(measureHead)
+        measureRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        form.addView(measureRows)
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, 0) }
+        saveButton = button("Salvar")
+        val cancel = button("Cancelar", false)
+        cancel.setOnClickListener { hideForm() }
+        actions.addView(saveButton, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(4) })
+        actions.addView(cancel, LinearLayout.LayoutParams(0, dp(46), 1f).apply { leftMargin = dp(4) })
+        form.addView(actions)
+        saveButton.setOnClickListener { saveProduct() }
+        return form
+    }
+
+    private fun showForm(product: Map<String, Any>?) {
+        editingId = product?.get("id")?.toString()
+        form.visibility = View.VISIBLE
+        formTitle.text = if (product == null) "Novo produto" else "Editar produto"
+        nameInput.setText(product?.get("name")?.toString() ?: "")
+        imageInput.setText(product?.get("image")?.toString() ?: "")
+        measureRows.removeAllViews()
+        val list = product?.get("measures") as? List<*>
+        if (list.isNullOrEmpty()) addMeasureRow(Measure(1, product?.get("unit")?.toString() ?: "Un", (product?.get("price") as? Number)?.toDouble() ?: 0.0))
+        else list.forEach { m ->
+            val map = m as? Map<*, *> ?: return@forEach
+            addMeasureRow(Measure((map["quantity"] as? Number)?.toInt() ?: 1, map["unit"]?.toString() ?: "Un", (map["price"] as? Number)?.toDouble() ?: 0.0, (map["lotSize"] as? Number)?.toInt()))
+        }
+        updateImagePreview()
+        form.postDelayed { form.requestFocus() }
+    }
+
+    private fun hideForm() { editingId = null; form.visibility = View.GONE; nameInput.setText(""); imageInput.setText(""); measureRows.removeAllViews(); imageWrap.visibility = View.GONE }
+
+    private fun addMeasureRow(measure: Measure) {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM; setPadding(dp(8), dp(8), dp(8), dp(8)); setBackgroundColor(Color.WHITE); elevation = dp(1).toFloat() }
+        val qty = field("Qtd").apply { setText(measure.quantity.toString()); inputType = 2 }
+        val unit = Spinner(this)
+        val units = listOf("Un", "Lote", "Duplo", "Dz", "1/8", "1/4", "Bdj", "Cx", "1/2", "GF", "Inteiro")
+        unit.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, units)
+        unit.setSelection(units.indexOf(measure.unit).coerceAtLeast(0))
+        val price = field("Preço").apply { setText(if (measure.price == 0.0) "" else String.format(Locale.US, "%.2f", measure.price)); inputType = 8194 }
+        val remove = button("×", false)
+        remove.setTextColor(red); remove.setOnClickListener { measureRows.removeView(row) }
+        row.addView(qty, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(4) })
+        row.addView(unit, LinearLayout.LayoutParams(0, dp(46), 1.1f).apply { leftMargin = dp(2); rightMargin = dp(4) })
+        row.addView(price, LinearLayout.LayoutParams(0, dp(46), 1f).apply { leftMargin = dp(2); rightMargin = dp(4) })
+        row.addView(remove, LinearLayout.LayoutParams(dp(44), dp(46)))
+        measureRows.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+    }
+
+    private fun readMeasures(): List<Measure> {
+        val out = mutableListOf<Measure>()
+        for (i in 0 until measureRows.childCount) {
+            val row = measureRows.getChildAt(i) as LinearLayout
+            val qty = (row.getChildAt(0) as EditText).text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 1
+            val unit = (row.getChildAt(1) as Spinner).selectedItem.toString()
+            val price = (row.getChildAt(2) as EditText).text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+            out.add(Measure(qty, unit, price, if (unit == "Lote") qty else null))
+        }
+        return out.filter { it.price >= 0 }
+    }
+
+    private fun saveProduct() {
+        val name = nameInput.text.toString().trim()
+        if (name.isEmpty()) { nameInput.error = "Informe o nome do produto."; return }
+        val measures = readMeasures()
+        if (measures.none { it.price > 0 }) { Toast.makeText(this, "Adicione pelo menos uma medida com preço.", Toast.LENGTH_LONG).show(); return }
+        val measureMaps = measures.map { m -> hashMapOf<String, Any>("quantity" to m.quantity, "unit" to m.unit, "price" to m.price).apply { m.lotSize?.let { put("lotSize", it) } } }
+        val first = measures.first()
+        val tiers = measures.filter { it.unit == first.unit && it.quantity > 1 }.map { hashMapOf<String, Any>("minQty" to it.quantity, "unitPrice" to it.price) }
+        val data = hashMapOf<String, Any>("name" to name, "category" to "produtos", "measures" to measureMaps, "unit" to first.unit, "price" to first.price, "priceTiers" to tiers, "image" to imageInput.text.toString().trim(), "archived" to false, "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp())
+        val id = editingId
+        saveButton.isEnabled = false
+        val task = if (id == null) db.collection("products").add(data) else db.collection("products").document(id).set(data, SetOptions.merge())
+        task.addOnCompleteListener { saveButton.isEnabled = true; if (it.isSuccessful) { hideForm(); loadProducts() } else Toast.makeText(this, "Não foi possível salvar o produto.", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun loadProducts() {
+        db.collection("products").get().addOnSuccessListener { snap ->
+            productsList.removeAllViews()
+            val docs = snap.documents.mapNotNull { d -> if (d.getBoolean("archived") == archived) d.data?.toMutableMap()?.apply { put("id", d.id) } else null }.sortedBy { it["name"]?.toString()?.lowercase(Locale("pt", "BR")) ?: "" }
+            if (docs.isEmpty()) productsList.addView(TextView(this).apply { text = "Nenhum produto nesta lista."; setTextColor(muted); setPadding(0, dp(20), 0, dp(20)) }) else docs.forEach { addProductRow(it) }
+        }.addOnFailureListener { Toast.makeText(this, "Não foi possível carregar os produtos.", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun addProductRow(p: Map<String, Any>) {
+        val id = p["id"]?.toString() ?: return
+        val box = MaterialCardView(this).apply { radius = dp(13).toFloat(); cardElevation = dp(2).toFloat(); setCardBackgroundColor(Color.WHITE); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) } }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(13), dp(13), dp(13), dp(13)) }
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val image = ImageView(this).apply { layoutParams = LinearLayout.LayoutParams(dp(60), dp(60)).apply { rightMargin = dp(12) }; scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(Color.LTGRAY) }
+        val url = p["image"]?.toString().orEmpty()
+        if (url.isNotEmpty()) loadUrlImage(url, image)
+        head.addView(image)
+        val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+        info.addView(TextView(this).apply { text = p["name"]?.toString() ?: ""; textSize = 17f; setTextColor(text); setTypeface(null, 1) })
+        val measures = (p["measures"] as? List<*>)?.mapNotNull { m -> val x=m as? Map<*,*> ?: return@mapNotNull null; "${x["quantity"] ?: 1} ${x["unit"] ?: "Un"} — R$ ${String.format(Locale("pt","BR"), "%.2f", (x["price"] as? Number)?.toDouble() ?: 0.0)}" }?.joinToString(" | ") ?: "Sem medidas"
+        info.addView(TextView(this).apply { text = measures; textSize = 12f; setTextColor(muted); setPadding(0, dp(4), 0, 0) })
+        head.addView(info); row.addView(head)
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(9), 0, 0) }
+        val edit = button("Editar", false); edit.setOnClickListener { showForm(p) }
+        actions.addView(edit, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(4) })
+        val action = if (archived) button("Desarquivar") else button("Arquivar", false)
+        action.setOnClickListener { db.collection("products").document(id).update("archived", !archived).addOnSuccessListener { loadProducts() } }
+        actions.addView(action, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(4) })
+        if (archived) { val del=button("Excluir",false); del.setTextColor(red); del.setOnClickListener { db.collection("products").document(id).delete().addOnSuccessListener { loadProducts() } }; actions.addView(del, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(8) }) }
+        row.addView(actions); box.addView(row); productsList.addView(box)
+    }
+
+    private fun loadUrlImage(url: String, target: ImageView) {
+        Thread { try { val bitmap = BitmapFactory.decodeStream(URL(url).openStream()); runOnUiThread { target.setImageBitmap(bitmap) } } catch (_: Exception) {} }.start()
+    }
+
+    private fun updateImagePreview() {
+        val url = imageInput.text.toString().trim()
+        if (url.isEmpty()) { imageWrap.visibility = View.GONE; return }
+        imageWrap.visibility = View.VISIBLE; imageStatus.text = "Carregando pré-visualização..."
+        loadUrlImage(url, imagePreview)
+        imageStatus.text = "Pré-visualização da imagem"
+    }
+
+    private fun listenSiteStatus() {
+        siteListener?.remove()
+        siteListener = db.collection("config").document("bot").addSnapshotListener { snap, _ ->
+            siteOffline = snap?.getBoolean("siteOffline") ?: false
+            renderSiteToggle()
+        }
+    }
+
+    private fun renderSiteToggle() {
+        siteToggle.text = if (siteOffline) "Site: FORA DO AR" else "Site: ONLINE"
+        siteToggle.setBackgroundColor(if (siteOffline) red else green)
+        siteToggle.setTextColor(Color.WHITE)
+    }
+
+    private fun toggleSite() {
+        val next = !siteOffline
+        db.collection("config").document("bot").set(mapOf("siteOffline" to next, "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()), SetOptions.merge())
+            .addOnFailureListener { Toast.makeText(this, "Não foi possível alterar o status do site.", Toast.LENGTH_LONG).show() }
+    }
+
+    override fun onDestroy() {
+        productsListener?.remove(); siteListener?.remove(); super.onDestroy()
+    }
 }
