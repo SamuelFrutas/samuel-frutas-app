@@ -12,7 +12,6 @@ import android.webkit.CookieManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -33,23 +32,20 @@ class MainActivity : Activity() {
         }
         webView = WebView(this)
         progress = ProgressBar(this).apply { visibility = View.VISIBLE }
-
         root.addView(webView, FrameLayout.LayoutParams(-1, -1))
-        root.addView(progress, FrameLayout.LayoutParams(72, 72).apply {
-            gravity = Gravity.CENTER
-        })
+        root.addView(progress, FrameLayout.LayoutParams(72, 72).apply { gravity = Gravity.CENTER })
         setContentView(root)
 
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
             loadsImagesAutomatically = true
-            cacheMode = WebSettings.LOAD_DEFAULT
+            cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
             allowFileAccess = false
             allowContentAccess = true
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
-            userAgentString = "$userAgentString SamuelFrutasAndroid/1.1"
+            userAgentString = "$userAgentString SamuelFrutasAndroid/1.2"
         }
 
         CookieManager.getInstance().apply {
@@ -58,43 +54,22 @@ class MainActivity : Activity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(
-                view: WebView,
-                request: WebResourceRequest
-            ): Boolean = false
-
-            override fun onPageFinished(view: WebView, url: String) {
-                progress.visibility = View.GONE
-            }
-
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                error: android.webkit.WebResourceError
-            ) {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = false
+            override fun onPageFinished(view: WebView, url: String) { progress.visibility = View.GONE }
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
                 if (request.isForMainFrame) {
                     progress.visibility = View.GONE
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Não foi possível carregar o Painel de Pedidos. Verifique sua internet.",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    Toast.makeText(this@MainActivity, "Não foi possível carregar o Painel de Pedidos. Verifique sua internet.", Toast.LENGTH_LONG).show()
                 }
             }
         }
 
         webView.webChromeClient = object : WebChromeClient() {
-            override fun onShowFileChooser(
-                webView: WebView,
-                filePath: ValueCallback<Array<Uri>>,
-                fileChooserParams: FileChooserParams
-            ): Boolean {
+            override fun onShowFileChooser(webView: WebView, filePath: ValueCallback<Array<Uri>>, fileChooserParams: FileChooserParams): Boolean {
                 filePathCallback?.onReceiveValue(null)
                 filePathCallback = filePath
-
                 return try {
-                    val intent = fileChooserParams.createIntent()
-                    startActivityForResult(intent, FILE_CHOOSER_REQUEST)
+                    startActivityForResult(fileChooserParams.createIntent(), FILE_CHOOSER_REQUEST)
                     true
                 } catch (_: Exception) {
                     filePathCallback?.onReceiveValue(null)
@@ -104,26 +79,17 @@ class MainActivity : Activity() {
             }
         }
 
-        if (savedInstanceState == null) {
-            webView.loadUrl(ADMIN_URL)
-        } else {
-            webView.restoreState(savedInstanceState)
-        }
+        if (savedInstanceState == null) webView.loadUrl(ADMIN_URL) else webView.restoreState(savedInstanceState)
     }
 
     @Deprecated("Required for WebView file chooser compatibility on API 23+")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != FILE_CHOOSER_REQUEST) return
-
         val callback = filePathCallback ?: return
         filePathCallback = null
         callback.onReceiveValue(
-            if (resultCode == RESULT_OK && data != null) {
-                WebChromeClient.FileChooserParams.parseResult(resultCode, data)
-            } else {
-                null
-            }
+            if (resultCode == RESULT_OK && data != null) WebChromeClient.FileChooserParams.parseResult(resultCode, data) else null
         )
     }
 
