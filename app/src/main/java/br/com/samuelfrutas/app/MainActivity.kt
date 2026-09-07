@@ -26,10 +26,7 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.rgb(244, 246, 245))
-        }
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.rgb(244, 246, 245)) }
         webView = WebView(this)
         progress = ProgressBar(this).apply { visibility = View.VISIBLE }
         root.addView(webView, FrameLayout.LayoutParams(-1, -1))
@@ -47,12 +44,10 @@ class MainActivity : Activity() {
             setSupportMultipleWindows(false)
             userAgentString = "$userAgentString SamuelFrutasAndroid/1.2"
         }
-
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(webView, true)
         }
-
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = false
             override fun onPageFinished(view: WebView, url: String) { progress.visibility = View.GONE }
@@ -63,7 +58,6 @@ class MainActivity : Activity() {
                 }
             }
         }
-
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(webView: WebView, filePath: ValueCallback<Array<Uri>>, fileChooserParams: FileChooserParams): Boolean {
                 filePathCallback?.onReceiveValue(null)
@@ -78,7 +72,6 @@ class MainActivity : Activity() {
                 }
             }
         }
-
         if (savedInstanceState == null) webView.loadUrl(ADMIN_URL) else webView.restoreState(savedInstanceState)
     }
 
@@ -88,9 +81,7 @@ class MainActivity : Activity() {
         if (requestCode != FILE_CHOOSER_REQUEST) return
         val callback = filePathCallback ?: return
         filePathCallback = null
-        callback.onReceiveValue(
-            if (resultCode == RESULT_OK && data != null) WebChromeClient.FileChooserParams.parseResult(resultCode, data) else null
-        )
+        callback.onReceiveValue(if (resultCode == RESULT_OK && data != null) WebChromeClient.FileChooserParams.parseResult(resultCode, data) else null)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
