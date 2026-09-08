@@ -384,14 +384,23 @@ class MainActivity : Activity() {
             visibility = if (image.text.toString().trim().isBlank()) View.GONE else View.VISIBLE
             contentDescription = "Prévia da imagem do produto"
         }
+        val previewStatus = tv("", 12f, false, muted).apply {
+            gravity = Gravity.CENTER
+            visibility = if (image.text.toString().trim().isBlank()) View.GONE else View.VISIBLE
+        }
         box.addView(preview, LinearLayout.LayoutParams(-1, dp(150)).apply { topMargin = dp(8) })
-        loadImagePreview(image.text.toString(), preview)
+        box.addView(previewStatus, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
+        loadImagePreview(image.text.toString(), preview, previewStatus)
         image.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val url = s?.toString()?.trim().orEmpty()
+                preview.setImageDrawable(null)
+                preview.tag = url
                 preview.visibility = if (url.isBlank()) View.GONE else View.VISIBLE
-                if (url.isNotBlank()) loadImagePreview(url, preview)
+                previewStatus.visibility = if (url.isBlank()) View.GONE else View.VISIBLE
+                previewStatus.text = if (url.isBlank()) "" else "Carregando prévia..."
+                if (url.isNotBlank()) loadImagePreview(url, preview, previewStatus)
             }
             override fun afterTextChanged(s: Editable?) = Unit
         })
@@ -496,11 +505,22 @@ class MainActivity : Activity() {
         parent.addView(row)
     }
 
-    private fun loadImagePreview(url: String, target: ImageView) {
+    private fun loadImagePreview(url: String, target: ImageView, status: TextView) {
         val cleanUrl = url.trim()
+        target.tag = cleanUrl
         if (cleanUrl.isBlank()) return
-        val parsed = try { URL(cleanUrl) } catch (_: Exception) { return }
-        if (parsed.protocol != "http" && parsed.protocol != "https") return
+        val parsed = try { URL(cleanUrl) } catch (_: Exception) {
+            runOnUiThread {
+                if (target.tag == cleanUrl) status.text = "Não foi possível carregar a imagem."
+            }
+            return
+        }
+        if (parsed.protocol != "http" && parsed.protocol != "https") {
+            runOnUiThread {
+                if (target.tag == cleanUrl) status.text = "Não foi possível carregar a imagem."
+            }
+            return
+        }
 
         Thread {
             var connection: HttpURLConnection? = null
@@ -511,15 +531,24 @@ class MainActivity : Activity() {
                 connection.instanceFollowRedirects = true
                 connection.doInput = true
                 connection.connect()
-                if (connection.responseCode !in 200..299) return@Thread
+                if (connection.responseCode !in 200..299) {
+                    runOnUiThread { if (target.tag == cleanUrl) status.text = "Não foi possível carregar a imagem." }
+                    return@Thread
+                }
 
                 connection.inputStream.use { stream ->
                     val bytes = stream.readBytes()
-                    if (bytes.isEmpty() || bytes.size > 12 * 1024 * 1024) return@Thread
+                    if (bytes.isEmpty() || bytes.size > 12 * 1024 * 1024) {
+                        runOnUiThread { if (target.tag == cleanUrl) status.text = "Não foi possível carregar a imagem." }
+                        return@Thread
+                    }
 
                     val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@Thread
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                        runOnUiThread { if (target.tag == cleanUrl) status.text = "Não foi possível carregar a imagem." }
+                        return@Thread
+                    }
 
                     var sample = 1
                     while (bounds.outWidth / sample > 1200 || bounds.outHeight / sample > 1200) sample *= 2
@@ -530,15 +559,20 @@ class MainActivity : Activity() {
                     val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
 
                     runOnUiThread {
-                        if (!isFinishing && !isDestroyed && bitmap != null && target.isAttachedToWindow) {
-                            target.setImageBitmap(bitmap)
-                            target.scaleType = ImageView.ScaleType.FIT_CENTER
-                            target.visibility = View.VISIBLE
+                        if (target.tag == cleanUrl) {
+                            if (!isFinishing && !isDestroyed && bitmap != null && target.isAttachedToWindow) {
+                                target.setImageBitmap(bitmap)
+                                target.scaleType = ImageView.ScaleType.FIT_CENTER
+                                target.visibility = View.VISIBLE
+                                status.text = ""
+                            } else {
+                                status.text = "Não foi possível carregar a imagem."
+                            }
                         }
                     }
                 }
             } catch (_: Exception) {
-                // Invalid, unsupported or oversized remote images must never crash the app.
+                runOnUiThread { if (target.tag == cleanUrl) status.text = "Não foi possível carregar a imagem." }
             } finally {
                 connection?.disconnect()
             }
