@@ -11,8 +11,8 @@ android {
         applicationId = "br.com.samuelfrutas.app"
         minSdk = 23
         targetSdk = 35
-        versionCode = 3
-        versionName = "2.0"
+        versionCode = 4
+        versionName = "2.1"
     }
 
     compileOptions {
