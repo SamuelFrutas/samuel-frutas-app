@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
+import android.content.Intent
+import android.net.Uri
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -45,6 +47,7 @@ class MainActivity : Activity() {
     private var products = mutableListOf<Product>()
     private var siteOffline = false
     private var siteListener: ListenerRegistration? = null
+    private var productsListener: ListenerRegistration? = null
     private var productsListener: ListenerRegistration? = null
 
     private val green = Color.rgb(16, 142, 76)
@@ -361,6 +364,21 @@ class MainActivity : Activity() {
         val image = field("Imagem (URL)", product?.image.orEmpty(), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         box.addView(tv("Imagem", 13f, true, muted), lpLabel(dp(14)))
         box.addView(image, lpField())
+        val googleImages = button("🔎 Pesquisar imagem no Google")
+        box.addView(googleImages, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(8) })
+        googleImages.setOnClickListener {
+            val productName = name.text.toString().trim()
+            if (productName.isBlank()) {
+                name.error = "Informe o nome do produto primeiro"
+                name.requestFocus()
+            } else {
+                val query = Uri.encode(productName)
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?tbm=isch&q=$query"))
+                try { startActivity(intent) } catch (_: Exception) {
+                    Toast.makeText(this, "Não foi possível abrir o Google Imagens.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
         val googleImages = button("🔎 Pesquisar imagem no Google")
         box.addView(googleImages, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(8) })
         googleImages.setOnClickListener {
