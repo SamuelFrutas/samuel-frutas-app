@@ -2,6 +2,8 @@ package br.com.samuelfrutas.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
+import android.net.Uri
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -43,6 +45,7 @@ class MainActivity : Activity() {
     private var products = mutableListOf<Product>()
     private var siteOffline = false
     private var siteListener: ListenerRegistration? = null
+    private var productsListener: ListenerRegistration? = null
 
     private val green = Color.rgb(16, 142, 76)
     private val greenDark = Color.rgb(10, 104, 55)
@@ -118,6 +121,7 @@ class MainActivity : Activity() {
 
     private fun showLogin() {
         siteListener?.remove()
+        productsListener?.remove()
         root = base()
         val scroll = ScrollView(this).apply { isFillViewport = true; clipToPadding = false }
         val login = LinearLayout(this).apply {
@@ -162,6 +166,7 @@ class MainActivity : Activity() {
 
     private fun showApp(userEmail: String) {
         siteListener?.remove()
+        productsListener?.remove()
         root = base()
 
         val header = LinearLayout(this).apply {
@@ -258,16 +263,22 @@ class MainActivity : Activity() {
     }
 
     private fun loadProducts() {
-        db.collection("products").orderBy("name", Query.Direction.ASCENDING).get().addOnSuccessListener { snap ->
-            products = snap.documents.map { d ->
-                val measures = (d.get("measures") as? List<*>)?.mapNotNull { raw ->
-                    val map = raw as? Map<*, *> ?: return@mapNotNull null
-                    Measure((map["quantity"] as? Number)?.toInt() ?: 1, map["unit"]?.toString() ?: "Un", (map["price"] as? Number)?.toDouble() ?: 0.0)
-                } ?: emptyList()
-                Product(d.id, d.getString("name").orEmpty(), d.getString("image").orEmpty(), d.getBoolean("archived") == true, measures)
-            }.filter { it.archived == archived }.toMutableList()
-            renderProducts()
-        }.addOnFailureListener { Toast.makeText(this, "Erro ao carregar produtos: ${it.message}", Toast.LENGTH_LONG).show() }
+        productsListener?.remove()
+        productsListener = db.collection("products").orderBy("name", Query.Direction.ASCENDING)
+            .addSnapshotListener { snap, error ->
+                if (error != null) {
+                    Toast.makeText(this, "Não foi possível sincronizar produtos. Tente Atualizar.", Toast.LENGTH_LONG).show()
+                    return@addSnapshotListener
+                }
+                products = (snap?.documents ?: emptyList()).map { d ->
+                    val measures = (d.get("measures") as? List<*>)?.mapNotNull { raw ->
+                        val map = raw as? Map<*, *> ?: return@mapNotNull null
+                        Measure((map["quantity"] as? Number)?.toInt() ?: 1, map["unit"]?.toString() ?: "Un", (map["price"] as? Number)?.toDouble() ?: 0.0)
+                    } ?: emptyList()
+                    Product(d.id, d.getString("name").orEmpty(), d.getString("image").orEmpty(), d.getBoolean("archived") == true, measures)
+                }.filter { it.archived == archived }.toMutableList()
+                renderProducts()
+            }
     }
 
     private fun renderProducts() {
@@ -291,7 +302,7 @@ class MainActivity : Activity() {
             }
             val nameRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
             nameRow.addView(tv(p.name, 18f, true), LinearLayout.LayoutParams(0, -2, 1f))
-            nameRow.addView(tv(if (p.measures.isEmpty()) "" else "${p.measures.size} opção${if (p.measures.size == 1) "" else "ões"}", 12f, false, muted))
+            nameRow.addView(tv(if (p.measures.isEmpty()) "" else "${p.measures.size}ª opção", 12f, false, muted))
             card.addView(nameRow)
             card.addView(tv(if (p.measures.isEmpty()) "Sem medidas cadastradas" else p.measures.joinToString("  •  ") { "${it.quantity} ${it.unit} — ${money(it.price)}" }, 14f, false, muted), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
             val actions = LinearLayout(this).apply { setPadding(0, dp(10), 0, 0) }
@@ -350,6 +361,21 @@ class MainActivity : Activity() {
         val image = field("Imagem (URL)", product?.image.orEmpty(), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         box.addView(tv("Imagem", 13f, true, muted), lpLabel(dp(14)))
         box.addView(image, lpField())
+        val googleImages = button("🔎 Pesquisar imagem no Google")
+        box.addView(googleImages, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(8) })
+        googleImages.setOnClickListener {
+            val productName = name.text.toString().trim()
+            if (productName.isBlank()) {
+                name.error = "Informe o nome do produto primeiro"
+                name.requestFocus()
+            } else {
+                val query = Uri.encode(productName)
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?tbm=isch&q=$query"))
+                try { startActivity(intent) } catch (_: Exception) {
+                    Toast.makeText(this, "Não foi possível abrir o Google Imagens.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
 
         val preview = ImageView(this).apply {
             setBackgroundColor(bg)
@@ -407,7 +433,18 @@ class MainActivity : Activity() {
                     measures.add(Measure(qty.coerceAtLeast(1), unit, price))
                 }
                 if (n.isBlank()) { name.error = "Informe o nome"; name.requestFocus(); return@setOnClickListener }
-                if (measures.none { it.price > 0 }) { Toast.makeText(this, "Adicione pelo menos uma medida com preço.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+                if (measures.isEmpty()) { Toast.makeText(this, "Adicione pelo menos uma medida.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+                if (measures.any { it.quantity < 1 }) { Toast.makeText(this, "A quantidade deve ser maior que zero.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+                if (measures.any { !it.price.isFinite() || it.price <= 0.0 }) { Toast.makeText(this, "Informe um preço válido e maior que zero em todas as opções.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+                val imageUrl = image.text.toString().trim()
+                if (imageUrl.isNotBlank()) {
+                    val parsed = try { URL(imageUrl) } catch (_: Exception) { null }
+                    if (parsed == null || (parsed.protocol != "http" && parsed.protocol != "https")) {
+                        image.error = "Informe uma URL http:// ou https:// válida"
+                        image.requestFocus()
+                        return@setOnClickListener
+                    }
+                }
                 val data = hashMapOf<String, Any>(
                     "name" to n,
                     "category" to "produtos",
@@ -415,7 +452,7 @@ class MainActivity : Activity() {
                     "unit" to measures.first().unit,
                     "price" to measures.first().price,
                     "priceTiers" to measures.filter { it.unit == measures.first().unit && it.quantity > 1 }.map { mapOf("minQty" to it.quantity, "unitPrice" to it.price) },
-                    "image" to image.text.toString().trim(),
+                    "image" to imageUrl,
                     "archived" to (product?.archived ?: false),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
@@ -519,7 +556,7 @@ class MainActivity : Activity() {
 
     private fun money(value: Double): String = NumberFormat.getCurrencyInstance(Locale("pt", "BR")).format(value)
 
-    override fun onDestroy() { siteListener?.remove(); super.onDestroy() }
+    override fun onDestroy() { siteListener?.remove(); productsListener?.remove(); super.onDestroy() }
 
     data class Measure(val quantity: Int, val unit: String, val price: Double)
     data class Product(val id: String, val name: String, val image: String, val archived: Boolean, val measures: List<Measure>)
