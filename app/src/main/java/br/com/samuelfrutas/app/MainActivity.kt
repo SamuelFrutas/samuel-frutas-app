@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
@@ -342,10 +343,10 @@ class MainActivity : Activity() {
 
     private fun showProductDialog(product: Product?) {
         val scroll = ScrollView(this).apply {
-            isFillViewport = false
+            isFillViewport = true
             clipToPadding = false
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            setPadding(0, 0, 0, dp(8))
+            setPadding(0, 0, 0, dp(160))
         }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -410,11 +411,11 @@ class MainActivity : Activity() {
         val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         box.addView(rows, LinearLayout.LayoutParams(-1, -2))
         val initialMeasures = product?.measures?.ifEmpty { listOf(Measure(1, "Un", 0.0)) } ?: listOf(Measure(1, "Un", 0.0))
-        initialMeasures.forEach { addMeasureRow(rows, it) }
+        initialMeasures.forEach { addMeasureRow(rows, it, scroll) }
 
         val addMeasure = button("+ Adicionar medida")
         box.addView(addMeasure, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(12) })
-        addMeasure.setOnClickListener { addMeasureRow(rows, Measure(1, "Un", 0.0)); scroll.post { scroll.fullScroll(View.FOCUS_DOWN) } }
+        addMeasure.setOnClickListener { addMeasureRow(rows, Measure(1, "Un", 0.0), scroll); scroll.post { scroll.fullScroll(View.FOCUS_DOWN) } }
         scroll.addView(box, ViewGroup.LayoutParams(-1, -2))
 
         val dialog = AlertDialog.Builder(this)
@@ -482,7 +483,23 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun addMeasureRow(parent: LinearLayout, measure: Measure) {
+    private fun keepFocusedFieldVisible(scroll: ScrollView, view: View) {
+        view.postDelayed({
+            if (!view.isAttachedToWindow) return@postDelayed
+            val rect = Rect()
+            view.getDrawingRect(rect)
+            scroll.offsetDescendantRectToMyCoords(view, rect)
+            val topLimit = dp(24)
+            val bottomLimit = scroll.height - dp(24)
+            if (rect.bottom > bottomLimit) {
+                scroll.smoothScrollBy(0, rect.bottom - bottomLimit + dp(110))
+            } else if (rect.top < topLimit) {
+                scroll.smoothScrollBy(0, rect.top - topLimit - dp(24))
+            }
+        }, 300)
+    }
+
+    private fun addMeasureRow(parent: LinearLayout, measure: Measure, scroll: ScrollView? = null) {
         val row = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(4), 0, dp(4))
@@ -494,6 +511,10 @@ class MainActivity : Activity() {
             minimumHeight = dp(54)
         }
         val price = field("Preço", if (measure.price == 0.0) "" else String.format(Locale.US, "%.2f", measure.price), InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        scroll?.let { parentScroll ->
+            qty.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) keepFocusedFieldVisible(parentScroll, qty) }
+            price.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) keepFocusedFieldVisible(parentScroll, price) }
+        }
         val remove = button("×")
         remove.textSize = 22f
         remove.contentDescription = "Remover medida"
