@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,6 +23,63 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+      - name: Ajustar rolagem dos campos com teclado
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/br/com/samuelfrutas/app/MainActivity.kt')
+          s = p.read_text(encoding='utf-8')
+
+          if 'private fun keepFocusedFieldVisible' not in s:
+              s = s.replace(
+                  'import android.graphics.Typeface\n',
+                  'import android.graphics.Typeface\nimport android.graphics.Rect\n'
+              )
+              marker = '    private fun addMeasureRow(parent: LinearLayout, measure: Measure) {'
+              helper = '''    private fun keepFocusedFieldVisible(scroll: ScrollView, view: View) {\n        view.postDelayed({\n            if (!view.isAttachedToWindow) return@postDelayed\n            val rect = Rect()\n            view.getDrawingRect(rect)\n            scroll.offsetDescendantRectToMyCoords(view, rect)\n            val topLimit = dp(24)\n            val bottomLimit = scroll.height - dp(24)\n            if (rect.bottom > bottomLimit) {\n                scroll.smoothScrollBy(0, rect.bottom - bottomLimit + dp(110))\n            } else if (rect.top < topLimit) {\n                scroll.smoothScrollBy(0, rect.top - topLimit - dp(24))\n            }\n        }, 300)\n    }\n\n'''
+              if marker not in s:
+                  raise SystemExit('Não foi possível localizar addMeasureRow')
+              s = s.replace(marker, helper + marker, 1)
+
+          s = s.replace(
+              'isFillViewport = false\n            clipToPadding = false\n            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS\n            setPadding(0, 0, 0, dp(8))',
+              'isFillViewport = true\n            clipToPadding = false\n            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS\n            setPadding(0, 0, 0, dp(160))',
+              1
+          )
+          s = s.replace(
+              'initialMeasures.forEach { addMeasureRow(rows, it) }',
+              'initialMeasures.forEach { addMeasureRow(rows, it, scroll) }',
+              1
+          )
+          s = s.replace(
+              'addMeasure.setOnClickListener { addMeasureRow(rows, Measure(1, "Un", 0.0)); scroll.post { scroll.fullScroll(View.FOCUS_DOWN) } }',
+              'addMeasure.setOnClickListener { addMeasureRow(rows, Measure(1, "Un", 0.0), scroll); scroll.post { scroll.fullScroll(View.FOCUS_DOWN) } }',
+              1
+          )
+          s = s.replace(
+              'private fun addMeasureRow(parent: LinearLayout, measure: Measure) {',
+              'private fun addMeasureRow(parent: LinearLayout, measure: Measure, scroll: ScrollView? = null) {',
+              1
+          )
+          old = '''        val price = field("Preço", if (measure.price == 0.0) "" else String.format(Locale.US, "%.2f", measure.price), InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)\n        val remove = button("×")'''
+          new = '''        val price = field("Preço", if (measure.price == 0.0) "" else String.format(Locale.US, "%.2f", measure.price), InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)\n        scroll?.let { parentScroll ->\n            qty.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) keepFocusedFieldVisible(parentScroll, qty) }\n            price.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) keepFocusedFieldVisible(parentScroll, price) }\n        }\n        val remove = button("×")'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          else:
+              print('Campos de preço já ajustados; continuando.')
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Persistir ajuste no código-fonte
+        run: |
+          if git diff --quiet; then
+            echo "Nenhuma alteração para persistir."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add app/src/main/java/br/com/samuelfrutas/app/MainActivity.kt
+            git commit -m "Melhorar rolagem dos campos com teclado"
+            git push
+          fi
       - name: Apply Brazilian price input formatting
         run: |
           python3 - <<'PY'
