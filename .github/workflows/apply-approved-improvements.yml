@@ -1,0 +1,61 @@
+name: Apply approved improvements
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply improvements to native Android source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/br/com/samuelfrutas/app/MainActivity.kt')
+          s = p.read_text(encoding='utf-8')
+
+          s = s.replace('import android.app.AlertDialog\n', 'import android.app.AlertDialog\nimport android.content.Intent\nimport android.net.Uri\n')
+          s = s.replace('private var siteListener: ListenerRegistration? = null\n', 'private var siteListener: ListenerRegistration? = null\n    private var productsListener: ListenerRegistration? = null\n')
+          s = s.replace('siteListener?.remove()\n        root = base()', 'siteListener?.remove()\n        productsListener?.remove()\n        root = base()')
+          s = s.replace('siteListener?.remove(); super.onDestroy()', 'siteListener?.remove(); productsListener?.remove(); super.onDestroy()')
+
+          old_load = '''    private fun loadProducts() {\n        db.collection("products").orderBy("name", Query.Direction.ASCENDING).get().addOnSuccessListener { snap ->\n            products = snap.documents.map { d ->\n                val measures = (d.get("measures") as? List<*>)?.mapNotNull { raw ->\n                    val map = raw as? Map<*, *> ?: return@mapNotNull null\n                    Measure((map["quantity"] as? Number)?.toInt() ?: 1, map["unit"]?.toString() ?: "Un", (map["price"] as? Number)?.toDouble() ?: 0.0)\n                } ?: emptyList()\n                Product(d.id, d.getString("name").orEmpty(), d.getString("image").orEmpty(), d.getBoolean("archived") == true, measures)\n            }.filter { it.archived == archived }.toMutableList()\n            renderProducts()\n        }.addOnFailureListener { Toast.makeText(this, "Erro ao carregar produtos: ${it.message}", Toast.LENGTH_LONG).show() }\n    }'''
+          new_load = '''    private fun loadProducts() {\n        productsListener?.remove()\n        productsListener = db.collection("products").orderBy("name", Query.Direction.ASCENDING)\n            .addSnapshotListener { snap, error ->\n                if (error != null) {\n                    Toast.makeText(this, "Não foi possível sincronizar produtos. Tente Atualizar.", Toast.LENGTH_LONG).show()\n                    return@addSnapshotListener\n                }\n                products = (snap?.documents ?: emptyList()).map { d ->\n                    val measures = (d.get("measures") as? List<*>)?.mapNotNull { raw ->\n                        val map = raw as? Map<*, *> ?: return@mapNotNull null\n                        Measure((map["quantity"] as? Number)?.toInt() ?: 1, map["unit"]?.toString() ?: "Un", (map["price"] as? Number)?.toDouble() ?: 0.0)\n                    } ?: emptyList()\n                    Product(d.id, d.getString("name").orEmpty(), d.getString("image").orEmpty(), d.getBoolean("archived") == true, measures)\n                }.filter { it.archived == archived }.toMutableList()\n                renderProducts()\n            }\n    }'''
+          if old_load in s:
+              s = s.replace(old_load, new_load)
+
+          old_image = '''        val image = field("Imagem (URL)", product?.image.orEmpty(), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)\n        box.addView(tv("Imagem", 13f, true, muted), lpLabel(dp(14)))\n        box.addView(image, lpField())'''
+          new_image = '''        val image = field("Imagem (URL)", product?.image.orEmpty(), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)\n        box.addView(tv("Imagem", 13f, true, muted), lpLabel(dp(14)))\n        box.addView(image, lpField())\n        val googleImages = button("🔎 Pesquisar imagem no Google")\n        box.addView(googleImages, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(8) })\n        googleImages.setOnClickListener {\n            val productName = name.text.toString().trim()\n            if (productName.isBlank()) {\n                name.error = "Informe o nome do produto primeiro"\n                name.requestFocus()\n            } else {\n                val query = Uri.encode(productName)\n                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?tbm=isch&q=$query"))\n                try { startActivity(intent) } catch (_: Exception) {\n                    Toast.makeText(this, "Não foi possível abrir o Google Imagens.", Toast.LENGTH_SHORT).show()\n                }\n            }\n        }'''
+          if old_image in s:
+              s = s.replace(old_image, new_image)
+
+          old_validation = '''                if (n.isBlank()) { name.error = "Informe o nome"; name.requestFocus(); return@setOnClickListener }\n                if (measures.none { it.price > 0 }) { Toast.makeText(this, "Adicione pelo menos uma medida com preço.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }'''
+          new_validation = '''                if (n.isBlank()) { name.error = "Informe o nome"; name.requestFocus(); return@setOnClickListener }\n                if (measures.isEmpty()) { Toast.makeText(this, "Adicione pelo menos uma medida.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }\n                if (measures.any { it.quantity < 1 }) { Toast.makeText(this, "A quantidade deve ser maior que zero.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }\n                if (measures.any { !it.price.isFinite() || it.price <= 0.0 }) { Toast.makeText(this, "Informe um preço válido e maior que zero em todas as opções.", Toast.LENGTH_SHORT).show(); return@setOnClickListener }\n                val imageUrl = image.text.toString().trim()\n                if (imageUrl.isNotBlank()) {\n                    val parsed = try { URL(imageUrl) } catch (_: Exception) { null }\n                    if (parsed == null || (parsed.protocol != "http" && parsed.protocol != "https")) {\n                        image.error = "Informe uma URL http:// ou https:// válida"\n                        image.requestFocus()\n                        return@setOnClickListener\n                    }\n                }'''
+          if old_validation in s:
+              s = s.replace(old_validation, new_validation)
+          s = s.replace('"image" to image.text.toString().trim(),', '"image" to imageUrl,')
+          s = s.replace('"${p.measures.size} opção${if (p.measures.size == 1) "" else "ões"}"', '"${p.measures.size}ª opção"')
+
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Commit source changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/br/com/samuelfrutas/app/MainActivity.kt
+          if git diff --cached --quiet; then
+            echo "No source changes needed"
+          else
+            git commit -m "Melhorar sincronizacao validacao e imagens do painel"
+            git push origin HEAD:main
+          fi
