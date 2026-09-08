@@ -1,0 +1,42 @@
+name: Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Apply Brazilian price input formatting
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/br/com/samuelfrutas/app/MainActivity.kt')
+          s = p.read_text(encoding='utf-8')
+          old = 'val price = field("Preço", if (measure.price == 0.0) "" else String.format(Locale.US, "%.2f", measure.price), InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)'
+          new = 'val price = field("Preço", if (measure.price == 0.0) "" else String.format(Locale.US, "%.2f", measure.price).replace(".", ","), InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)\n        price.keyListener = android.text.method.DigitsKeyListener.getInstance("0123456789,")'
+          if old in s:
+              p.write_text(s.replace(old, new), encoding='utf-8')
+          else:
+              print('Preço já formatado; continuando.')
+          PY
+      - name: Build debug APK
+        run: gradle clean assembleDebug --stacktrace
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: samuel-frutas-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
