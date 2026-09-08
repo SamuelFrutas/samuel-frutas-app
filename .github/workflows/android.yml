@@ -93,6 +93,8 @@ jobs:
           else:
               print('Preço já formatado; continuando.')
           PY
+      - name: Confirmar fonte usada na compilação
+        run: grep -q 'private fun keepFocusedFieldVisible' app/src/main/java/br/com/samuelfrutas/app/MainActivity.kt
       - name: Build debug APK
         run: gradle clean assembleDebug --stacktrace
       - name: Upload APK
